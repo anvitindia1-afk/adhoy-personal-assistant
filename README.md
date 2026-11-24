@@ -1,4 +1,7 @@
-# Personal Assistant
+# Personal Assistant — команда ADHOY
+
+> **ADHOY** читається як «Ahoy!» — привітання моряків. Наш помічник теж починає з привітання.
+> Команда: Anvit, Dmytro, Hryhorii, Oleksandr, Yurii.
 
 Консольний персональний помічник на Python. Зберігає **контакти** (імена, телефони, email, адреси, дні народження) та **нотатки з тегами**. Усі дані зберігаються на диску й не губляться після перезапуску.
 
@@ -25,8 +28,8 @@
 Потрібен **Python 3.10** або новіший. Сторонні бібліотеки не потрібні.
 
 ```bash
-git clone https://github.com/<your-account>/personal-assistant.git
-cd personal-assistant
+git clone https://github.com/anvitindia1-afk/adhoy-personal-assistant.git
+cd adhoy-personal-assistant
 python3 main.py
 ```
 

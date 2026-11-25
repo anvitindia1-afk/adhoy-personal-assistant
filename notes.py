@@ -78,11 +78,15 @@ class NoteBook:
         return self.notes[note_id]
 
     def edit_note(self, note_id, new_text, new_tags=None):
-        """Замінює текст нотатки. Якщо передали нові теги — замінює й теги."""
+        """
+        Змінює нотатку. Якщо передали текст — замінює текст,
+        якщо передали теги — замінює теги. Можна змінити щось одне.
+        """
         note = self.find(note_id)
-        if not new_text.strip():
-            raise ValueError("Note text cannot be empty.")
-        note.text = new_text.strip()
+        if not new_text.strip() and not new_tags:
+            raise ValueError("Write a new text and/or new #tags.")
+        if new_text.strip():
+            note.text = new_text.strip()
         if new_tags:
             note.tags = []
             for tag in new_tags:

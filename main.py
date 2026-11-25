@@ -13,9 +13,14 @@ CONTACT_COMMANDS = {
     "change": handlers.change_phone,
     "remove-phone": handlers.remove_phone,
     "phone": handlers.show_phone,
+    "show": handlers.show_contact,
+    "rename": handlers.rename_contact,
     "add-email": handlers.add_email,
+    "remove-email": handlers.remove_email,
     "add-address": handlers.add_address,
+    "remove-address": handlers.remove_address,
     "add-birthday": handlers.add_birthday,
+    "remove-birthday": handlers.remove_birthday,
     "show-birthday": handlers.show_birthday,
     "birthdays": handlers.birthdays,
     "search": handlers.search_contacts,
@@ -36,7 +41,7 @@ NOTE_COMMANDS = {
 }
 
 EXIT_COMMANDS = ["exit", "close"]
-OTHER_COMMANDS = ["hello", "help"]
+OTHER_COMMANDS = ["hello", "help", "contact-notes"]
 
 ALL_COMMANDS = (
     list(CONTACT_COMMANDS) + list(NOTE_COMMANDS)
@@ -44,38 +49,60 @@ ALL_COMMANDS = (
 )
 
 HELP_TEXT = """
-Available commands:
+Available commands  (<...> required, [...] optional — type WITHOUT brackets)
 
   CONTACTS
-  add [name] [phone]                 add a contact or one more phone
-  change [name] [old] [new]          change a phone number
-  remove-phone [name] [phone]        remove a phone number
-  phone [name]                       show phone numbers
-  add-email [name] [email]           add or change email
-  add-address [name] [address]       add or change address
-  add-birthday [name] [DD.MM.YYYY]   add or change birthday
-  show-birthday [name]               show birthday
-  birthdays [days]                   birthdays in the next N days (default 7)
-  search [text]                      find contacts by any field
-  delete [name]                      delete a contact
-  all                                show all contacts
+  add <name> [phone]                   add a contact (phone is optional)
+                                       or one more phone to a contact
+  change <name> <old> <new>            change a phone number
+  remove-phone <name> <phone>          remove a phone number
+  phone <name>                         show phone numbers
+  show <name>                          show all info about a contact
+  rename <old name> <new name>         rename a contact
+  add-email <name> <email>             add or change email
+  remove-email <name>                  remove email
+  add-address <name> <address>         add or change address
+  remove-address <name>                remove address
+  add-birthday <name> <DD.MM.YYYY>     add or change birthday
+  remove-birthday <name>               remove birthday
+  show-birthday <name>                 show birthday
+  birthdays [days]                     birthdays in the next N days (default 7)
+  search <text>                        find contacts by any field
+  delete <name>                        delete a contact (asks to confirm)
+  all                                  show all contacts
 
   NOTES
-  add-note [text] [#tag ...]         add a note (tags start with #)
-  notes                              show all notes
-  find-note [text]                   find notes by text or tag
-  edit-note [id] [text] [#tag ...]   change a note
-  delete-note [id]                   delete a note
-  add-tag [id] [tag ...]             add tags to a note
-  remove-tag [id] [tag]              remove a tag from a note
-  find-tag [tag]                     show notes with this tag
-  sort-notes                         show notes sorted by tags
+  add-note <text> [#tag ...]           add a note (tags start with #)
+  notes                                show all notes
+  find-note <text>                     find notes by text or tag
+  edit-note <id> [text] [#tag ...]     change text and/or tags of a note
+  delete-note <id>                     delete a note (asks to confirm)
+  add-tag <id> <tag> [tag ...]         add tags to a note
+  remove-tag <id> <tag>                remove a tag from a note
+  find-tag <tag>                       show notes with this tag
+  sort-notes                           show notes sorted by tags
+  contact-notes <name>                 notes about a contact (#name or name in text)
 
   OTHER
-  hello                              greeting
-  help                               show this menu
-  exit / close                       save and exit
+  hello                                greeting
+  help                                 show this menu
+  exit / close                         save and exit
+
+  EXAMPLES
+  add Anna Maria +380501234567         name can have several words
+  add Anna 050-123-45-67               phone: 0501234567, 380..., +380..., with - ( )
+  add-birthday Anna 28.11.1995
+  add-note Buy a gift #anna #shop
+  contact-notes Anna
+
+Data is saved automatically after every change.
 """
+
+# Команди, які змінюють дані — після них зберігаємо файли
+READ_ONLY_COMMANDS = [
+    "phone", "show", "show-birthday", "birthdays", "search", "all",
+    "notes", "find-note", "find-tag", "sort-notes", "contact-notes",
+]
 
 
 def parse_input(user_input):
@@ -91,6 +118,40 @@ def suggest_command(command):
     if matches:
         return f"Unknown command '{command}'. Did you mean '{matches[0]}'?"
     return f"Unknown command '{command}'. Type 'help' to see all commands."
+
+
+def has_brackets(args):
+    """Чи ввів користувач дужки з довідки: add [Anna] <050...>."""
+    for arg in args:
+        if arg[0] in "[<" or arg[-1] in "]>":
+            return True
+    return False
+
+
+def ask_yes_no(question):
+    """Питає 'так чи ні'. Повертає True, якщо відповідь y / yes."""
+    try:
+        answer = input(f"{question} (y/n): ")
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return False
+    return answer.strip().lower() in ["y", "yes"]
+
+
+def delete_question(command, args, book, notes):
+    """
+    Текст питання перед видаленням або None,
+    якщо такого контакту / нотатки немає (тоді обробник сам скаже помилку).
+    """
+    if command == "delete" and args:
+        record = book.find(" ".join(args))
+        if record is not None:
+            return f"Delete contact {record.short_info()}?"
+    if command == "delete-note" and args and args[0].isdigit():
+        note = notes.notes.get(int(args[0]))
+        if note is not None:
+            return f"Delete note [{note.id}] {note.text}?"
+    return None
 
 
 def main():
@@ -116,14 +177,34 @@ def main():
             break
         elif command == "hello":
             print("How can I help you?")
+            continue
         elif command == "help":
             print(HELP_TEXT)
-        elif command in CONTACT_COMMANDS:
+            continue
+        elif command not in ALL_COMMANDS:
+            print(suggest_command(command))
+            continue
+
+        if command in CONTACT_COMMANDS and has_brackets(args):
+            print("Type values without brackets, e.g.: add Anna 0501234567")
+            continue
+
+        # Перед видаленням перепитуємо
+        question = delete_question(command, args, book, notes)
+        if question and not ask_yes_no(question):
+            print("Cancelled.")
+            continue
+
+        if command in CONTACT_COMMANDS:
             print(CONTACT_COMMANDS[command](args, book))
         elif command in NOTE_COMMANDS:
             print(NOTE_COMMANDS[command](args, notes))
         else:
-            print(suggest_command(command))
+            print(handlers.contact_notes(args, book, notes))
+
+        # Автозбереження: дані не пропадуть, навіть якщо закрити вікно
+        if command not in READ_ONLY_COMMANDS:
+            save_data(book, notes)
 
     save_data(book, notes)
 
